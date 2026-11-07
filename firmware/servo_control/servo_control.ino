@@ -1,44 +1,77 @@
-// ESP32 + Firebase Realtime Database servo control.
+// ESP32 + Firebase Realtime Database stepper + servo control.
 //
-// How it works:
-//   - The web app writes a new number (a timestamp) to /device/trigger.
-//   - This sketch polls that value. When it changes, the servo moves.
-//   - The sketch reports "moving" / "ready" to /device/status so the app can show it.
+// Big picture:
+//   - The web app writes three values to Firebase in one update:
+//       /device/stepperTarget  (stepper position, 0-1022)
+//       /device/servoAngle     (servo angle, 0-180)
+//       /device/trigger        (a new timestamp = "go")
+//   - This sketch checks /device/trigger over and over ("polling").
+//   - When it changes, it reads the two targets and moves both motors.
+//   - It writes "moving" / "ready" to /device/status so the app can show it,
+//     and prints the final positions to the Serial Monitor.
 //
 // Libraries to install (Library Manager): ESP32Servo
 // Board: ESP32 Dev Module
 
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <ESP32Servo.h>
-#include "secrets.h"   // WIFI_SSID, WIFI_PASS, DB_URL
+#include <WiFi.h>              // connects the ESP32 to WiFi
+#include <WiFiClientSecure.h>  // lets the ESP32 make HTTPS (encrypted) connections
+#include <HTTPClient.h>        // makes HTTP requests (GET, PUT) for us
+#include <Stepper.h>           // stepper control
+#include <ESP32Servo.h>        // servo control that works on the ESP32
+#include "secrets.h"           // your private settings: WIFI_SSID, WIFI_PASS, DB_URL, NTFY_TOPIC
 
-const int SERVO_PIN = 18;            // change to the GPIO your servo signal wire is on
-const int REST_ANGLE = 0;
-const int ACTIVE_ANGLE = 90;
-const unsigned long POLL_MS = 700;   // how often to check Firebase
+const unsigned long POLL_MS = 700;   // how often to check Firebase (milliseconds)
 
-Servo servo;
-WiFiClientSecure secureClient;
-HTTPClient http;
+// Stepper motor settings
+const int r1 = 25;
+const int r2 = 32;
+const int r3 = 33;
+const int r4 = 26;
 
-String lastTrigger = "";
-bool primed = false;                 // true once we've read the initial value
-unsigned long lastPoll = 0;
+// Servo motor settings
+const int sPin = 13;
 
+// ---------- Global objects and state ----------
+Stepper r(512, r1, r2, r3, r4);
+int rPos = 0;                        // current stepper position (0-1023); 0 = where it was at power-on
+Servo s;
+int sPos = 0;                        // current servo angle in degrees
+WiFiClientSecure secureClient;       // the encrypted connection used for all requests
+HTTPClient http;                     // the helper that sends the requests
+
+String lastTrigger = "";             // the most recent trigger value we've seen
+bool primed = false;                 // becomes true after the first read following boot
+unsigned long lastPoll = 0;          // time (millis) of the last Firebase check
+
+// Builds a full Firebase REST URL.
+// Example: dbUrl("/device/trigger") -> "<DB_URL>/device/trigger.json"
+// Firebase's REST API needs ".json" on the end of the path.
 String dbUrl(const char* path) {
   return String(DB_URL) + path + ".json";
 }
 
+// Reads the value at a database path. Returns true on success and puts the
+// result in `out`. For a number, out is something like "1731234567890".
+// If nothing is stored there yet, Firebase returns the text "null".
 bool dbGet(const char* path, String &out) {
-  http.begin(secureClient, dbUrl(path));
-  int code = http.GET();
-  if (code == 200) out = http.getString();
-  http.end();
+  http.begin(secureClient, dbUrl(path));   // set up the request
+  int code = http.GET();                   // send it; code 200 means success
+  if (code == 200) out = http.getString(); // grab the response body
+  http.end();                              // finish this request
   return code == 200;
 }
 
+// Like dbGet, but for a whole number. Returns false if the read failed
+// or nothing is stored there yet.
+bool dbGetInt(const char* path, int &out) {
+  String raw;
+  if (!dbGet(path, raw) || raw == "null") return false;
+  out = raw.toInt();
+  return true;
+}
+
+// Writes a value to a database path. `jsonBody` must be valid JSON, so a
+// string needs its own quotes, e.g. "\"ready\"". PUT replaces whatever was there.
 void dbPut(const char* path, const String &jsonBody) {
   http.begin(secureClient, dbUrl(path));
   http.addHeader("Content-Type", "application/json");
@@ -46,45 +79,121 @@ void dbPut(const char* path, const String &jsonBody) {
   http.end();
 }
 
-void moveServo() {
-  Serial.println("Moving servo");
-  dbPut("/device/status", "\"moving\"");
-  servo.write(ACTIVE_ANGLE);
-  delay(800);
-  servo.write(REST_ANGLE);
-  delay(800);
-  dbPut("/device/status", "\"ready\"");
+// Sends a push notification to your phone through ntfy.sh.
+// Anyone subscribed to NTFY_TOPIC in the ntfy app receives it.
+// A fresh connection is used each time (ntfy is a different server than
+// Firebase, so we can't reuse the Firebase connection). Keep title/message plain ASCII.
+void notify(const char* title, const char* message, const char* tag) {
+  WiFiClientSecure client;
+  client.setInsecure();                    // demo only, same caveat as above
+  HTTPClient n;
+  n.setTimeout(5000);                      // give up after 5 s so a failure can't hang the motors
+  n.begin(client, String("https://ntfy.sh/") + NTFY_TOPIC);
+  n.addHeader("Title", title);             // bold heading of the notification
+  n.addHeader("Tags", tag);                // ntfy turns tag names into emoji icons
+  int code = n.POST(message);              // the message text is the request body
+  Serial.printf("ntfy \"%s\" -> HTTP %d\n", title, code);   // 200 means it was sent
+  n.end();
 }
 
+// STEPPER MOTOR FUNCTIONS
+// Moves one notch: 2 steps forward (dir = 1) or backward (dir = -1).
+void rStep(int dir) {
+  r.step(2 * dir);
+  rPos += (2 * dir);
+  rPos %= 1024;
+}
+
+// must be accurate; determines rotation so the holes for the pills to fall out align
+// `pos` must be an even number from 0 to 1022 (the stepper moves 2 steps at a time).
+void rToPos(int pos) {
+  int dir = 1;
+  if (rPos > pos) dir *= -1;
+  while (rPos != pos) {
+    rStep(dir);
+  }
+}
+
+// TODO:
+// Jam mechanism: void fixJam()
+
+// SERVO MOTOR FUNCTIONS
+// will open and close the door (doesn't need to be super accurate)
+void sToPos(int pos) {
+  s.write(pos);
+  sPos = pos;
+}
+
+// COMBINED FUNCTIONS
+
+// TODO:
+// 
+
+// Moves both motors to the requested targets, then reports where they ended up.
+void moveMotors(int rTarget, int sTarget) {
+  // Keep the requests inside what the hardware can do.
+  sTarget = constrain(sTarget, 0, 180);
+  rTarget = constrain(rTarget, 0, 1022);
+  rTarget -= rTarget % 2;                  // odd positions can't be reached, so round down to even
+
+  Serial.printf("Moving: stepper %d -> %d, servo %d -> %d\n", rPos, rTarget, sPos, sTarget);
+  dbPut("/device/status", "\"moving\"");
+
+  sToPos(sTarget);                         // servo starts moving right away...
+  notify("Motors started", "The motors are moving.", "arrow_forward");  // ...while this ~1 s request runs
+  rToPos(rTarget);                         // blocks until the stepper has arrived
+
+  Serial.printf("Final positions -> stepper: %d, servo: %d degrees\n", rPos, sPos);
+
+  dbPut("/device/status", "\"ready\"");
+  char msg[64];
+  snprintf(msg, sizeof(msg), "Stepper at %d, servo at %d deg.", rPos, sPos);
+  notify("Motors stopped", msg, "white_check_mark");
+}
+
+// Connects to your WiFi network and waits until it succeeds.
+// The ESP32 only supports 2.4 GHz networks.
 void connectWiFi() {
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_STA);                     // station mode: act as a WiFi client
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED) {  // print a dot every half second until connected
     delay(500);
     Serial.print(".");
   }
   Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
 }
 
+// Runs once when the board powers on or resets.
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200);                    // open the Serial Monitor connection
 
-  servo.setPeriodHertz(50);
-  servo.attach(SERVO_PIN, 500, 2400);
-  servo.write(REST_ANGLE);
+  // set up the stepper motor
+  pinMode(r1, OUTPUT);
+  pinMode(r2, OUTPUT);
+  pinMode(r3, OUTPUT);
+  pinMode(r4, OUTPUT);
+  r.setSpeed(20);
+
+  // set up the servo motor
+  s.setPeriodHertz(50);                    // standard hobby servos expect a 50 Hz signal
+  s.attach(sPin, 500, 2400);               // pulse range in microseconds
+  sToPos(0);                               // start at 0 degrees
 
   connectWiFi();
 
   // NOTE: setInsecure() skips certificate checking. Fine for a demo,
   // but pin the certificate before using this for anything real.
   secureClient.setInsecure();
-  http.setReuse(true);               // keep the TLS connection open between polls
+  http.setReuse(true);                     // keep the connection open between polls (faster)
 
-  dbPut("/device/status", "\"ready\"");
+  dbPut("/device/status", "\"ready\"");    // tell the app we're online
+  Serial.printf("Start positions -> stepper: %d, servo: %d degrees\n", rPos, sPos);
 }
 
+// Runs over and over, forever, after setup().
 void loop() {
+  // 1. If WiFi dropped, try to reconnect and skip this pass.
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi lost, reconnecting");
     WiFi.reconnect();
@@ -92,24 +201,36 @@ void loop() {
     return;
   }
 
+  // 2. Only check Firebase every POLL_MS milliseconds. (We use millis()
+  //    instead of delay() so the loop never gets stuck waiting.)
   if (millis() - lastPoll < POLL_MS) return;
   lastPoll = millis();
 
+  // 3. Read the current trigger value from Firebase.
   String trigger;
   if (!dbGet("/device/trigger", trigger)) {
     Serial.println("Firebase read failed");
     return;
   }
 
+  // 4. First successful read after boot: just remember the value. Without
+  //    this, the motors would move at every restart because an old trigger
+  //    is still stored in the database.
   if (!primed) {
-    // First read after boot: remember it, but don't move the servo.
     lastTrigger = trigger;
     primed = true;
     return;
   }
 
+  // 5. If the value is different from last time, the app was tapped:
+  //    remember the new value, read the two targets, and move both motors.
   if (trigger != lastTrigger) {
     lastTrigger = trigger;
-    moveServo();
+    int rTarget, sTarget;
+    if (dbGetInt("/device/stepperTarget", rTarget) && dbGetInt("/device/servoAngle", sTarget)) {
+      moveMotors(rTarget, sTarget);
+    } else {
+      Serial.println("Couldn't read stepperTarget/servoAngle - ignoring this trigger");
+    }
   }
 }
