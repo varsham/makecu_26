@@ -16,7 +16,7 @@ function ScheduleScreen({ pills }) {
     if (dt < start || dt > end) { days[d] = { tone: dt < start ? "paper-2" : undefined }; continue; }
     const list = D.scheduledOn(pills, ym.y, ym.m, d);
     const cats = [...new Set(list.map((p) => p.category))];
-    const paused = pills.some((p) => p.pausedUntil && ym.m === 7 && d < p.pausedUntil && p.days.includes(D.weekdayOf(ym.y, ym.m, d)));
+    const paused = pills.some((p) => D.isPaused(p, ym.y, ym.m, d) && p.days.includes(D.weekdayOf(ym.y, ym.m, d)));
     days[d] = { tone: tones[D.weekdayOf(ym.y, ym.m, d)], dots: cats.map((k) => D.CATEGORIES[k].color), paused };
   }
   const shift = (k) => { const m = ym.m + k; setYm({ y: ym.y + Math.floor(m / 12), m: (m + 12) % 12 }); setSel(null); };

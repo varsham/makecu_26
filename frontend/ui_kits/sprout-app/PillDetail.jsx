@@ -65,9 +65,9 @@ function PillDetail({ pill: p, pills, onBack, onEdit, onUpdate, onPauseCategory,
 
       <Sheet open={sheet === "break"} onClose={() => setSheet(null)} title="Take a break"
         footer={<Button fullWidth size="lg" icon="pause" onClick={() => {
-          const until = 13 + breakDays;
+          const until = D.addDaysISO(D.todayISO(), breakDays);   // the date it comes back, e.g. "2026-11-15"
           if (wholeCat) onPauseCategory(p.category, until); else onUpdate({ ...p, pausedUntil: until });
-          setSheet(null); toast(`Paused ${wholeCat ? "all " + c.label.toLowerCase() : p.name} until Aug ${until}`, "pause");
+          setSheet(null); toast(`Paused ${wholeCat ? "all " + c.label.toLowerCase() : p.name} until ${D.fmtShortDate(until)}`, "pause");
         }}>Pause for {breakDays} {breakDays === 1 ? "day" : "days"}</Button>}>
         <p style={{ margin: "0 0 18px", color: "var(--text-body)", lineHeight: 1.5 }}>Your other pills stay on schedule. We'll pick this back up automatically.</p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>

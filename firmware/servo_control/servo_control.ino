@@ -10,7 +10,7 @@
 //   - It writes "moving" / "ready" to /device/status so the app can show it,
 //     and prints the final positions to the Serial Monitor.
 //
-// Libraries to install (Library Manager): ESP32Servo
+// Libraries to install (Library Manager): ESP32Servo, ArduinoJson (version 7 or newer)
 // Board: ESP32 Dev Module
 
 #include <WiFi.h>              // connects the ESP32 to WiFi
@@ -18,7 +18,10 @@
 #include <HTTPClient.h>        // makes HTTP requests (GET, PUT) for us
 #include <Stepper.h>           // stepper control
 #include <ESP32Servo.h>        // servo control that works on the ESP32
+#include <ArduinoJson.h>       // reads the schedule from Firebase (needs version 7 or newer)
+#include <time.h>              // the clock, set from the internet
 #include "secrets.h"           // your private settings: WIFI_SSID, WIFI_PASS, DB_URL, NTFY_TOPIC
+#include "schedule_logic.h"    // the scheduling rules (kept in their own file so they can be tested)
 
 const unsigned long POLL_MS = 700;   // how often to check Firebase (milliseconds)
 
@@ -43,6 +46,19 @@ bool checkForJam(int state, unsigned long start);
 // 0 to 1022 (stepper motor position)
 int compartments[3] = {170, 510, 850};
 const int NUM_COMPARTMENTS = sizeof(compartments) / sizeof(compartments[0]);   // 3
+
+// ---------- Scheduled dispensing ----------
+// The app saves each medicine's schedule in Firebase (/schedule/c1, /c2, /c3). The board reads it,
+// and at each scheduled time dispenses every pill due then, one after another.
+const char* TIME_ZONE = "EST5EDT,M3.2.0,M11.1.0";   // Eastern time, with daylight saving
+const int DOSE_WINDOW_MIN = 5;                       // a dose is given up to this many minutes after its time; later than that it is skipped
+const unsigned long SCHEDULE_REFRESH_MS = 20000;     // how often to re-read the schedule from Firebase
+
+ScheduleEntry sched[NUM_COMPARTMENTS];   // one per compartment (ScheduleEntry is defined in schedule_logic.h)
+bool scheduleLoaded = false;
+unsigned long lastScheduleFetch = 0;
+String handledSlots[16];   // slots (date + time) already dealt with since the board started
+int handledNext = 0;
 
 // Stepper motor settings
 const int r1 = 25;
@@ -278,23 +294,21 @@ void openDoor() {
   Serial.println("Starting process to open door...");
   int sPos = s.read();
   // check if door is already open
-  if (sPos > 130) {
-    Serial.println("Door already open.");
-  } else {
-    sToPos(170);
-    Serial.println("Door opened.");
+  s.write(10);
+  for (int i = 10; i < 170; i += 8) {
+    s.write(i);
   }
 }
 
 // TODO: closing the door by changing the servo motor position
 void closeDoor() {
-  Serial.println("Starting process to close door...");
+  state = 4;                               // OPENING_DOOR: stays 4 until the pill is seen (or a jam is flagged)
+  Serial.println("Starting process to open door...");
   int sPos = s.read();
-  if (sPos < 50) {
-    Serial.println("Door already closed.");
-  } else {
-    sToPos(10);
-    Serial.println("Door closed.");
+  // check if door is already open
+  s.write(170);
+  for (int i = 170; i > 10; i -= 8) {
+    s.write(i);
   }
 }
 
@@ -332,12 +346,12 @@ bool pillRelease() {
   return released;
 }
 
-// TODO: shifting to a specific compartment
-void toCompartment(int c) {
-  // parameter: which compartment number, 1-indexed
+// Shifting to a specific compartment. `c` is the compartment number, 1-indexed.
+// quiet = true skips the phone notification (used when several pills are dispensed in a row).
+void toCompartment(int c, bool quiet) {
   rToPos(compartments[c - 1]);
   if (state == 1 || state == 2) return;    // a jam was reported, so we didn't actually arrive
-  notify("To compartment", "Rotated to specified compartment.", "arrow_forward");  // ...while this ~1 s request runs
+  if (!quiet) notify("To compartment", "Rotated to specified compartment.", "arrow_forward");  // ...while this ~1 s request runs
   Serial.printf("Rotated to compartment %d\n", c);
 }
 
@@ -373,32 +387,171 @@ void writeResult(int c, bool dispensed) {
   dbPut("/device/result", body);
 }
 
-// Rotates to compartment `c` (1 to NUM_COMPARTMENTS) and releases one pill, then
-// reports the result and status to the app.
-void dispenseFromCompartment(int c) {
+// Rotates to compartment `c` (1 to NUM_COMPARTMENTS) and releases one pill, then sets the status.
+// Returns true if the pill was seen dropping.
+//   report = true  writes /device/result for the app, which is waiting for the answer to its request.
+//   quiet  = true  skips the per-pill phone notifications (used for scheduled doses, which send one summary).
+bool dispenseFromCompartment(int c, bool report, bool quiet) {
   if (c < 1 || c > NUM_COMPARTMENTS) {
     Serial.printf("Dispense ignored: compartment %d doesn't exist (1 to %d)\n", c, NUM_COMPARTMENTS);
-    writeResult(c, false);
-    return;
+    if (report) writeResult(c, false);
+    return false;
   }
 
   state = 0;                               // clear any earlier jam before starting
   Serial.printf("Dispense requested: compartment %d\n", c);
   dbPut("/device/status", "\"moving\"");
 
-  toCompartment(c);                        // rotate (state becomes 1 if the rotation jams)
+  toCompartment(c, quiet);                 // rotate (state becomes 1 if the rotation jams)
   bool released = false;
   if (state != 1 && state != 2) released = pillRelease();   // only open the door if we arrived
 
-  writeResult(c, released);                // before "ready", so the app can match it up
+  if (report) writeResult(c, released);    // before "ready", so the app can match it up
   if (released) {
     dbPut("/device/status", "\"ready\"");
-    char msg[64];
-    snprintf(msg, sizeof(msg), "Pill released from compartment %d.", c);
-    notify("Pill dispensed", msg, "pill");
+    if (!quiet) {
+      char msg[64];
+      snprintf(msg, sizeof(msg), "Pill released from compartment %d.", c);
+      notify("Pill dispensed", msg, "pill");
+    }
   }
   // If it wasn't released, the jam code has already set the status to "jam" and notified you.
   Serial.printf("Dispense result: compartment %d, dispensed = %s\n", c, released ? "yes" : "no");
+  return released;
+}
+
+// ---------- Scheduled dispensing ----------
+
+// Reads /schedule from Firebase into sched[]. Returns false if the read failed (the old copy is kept).
+bool fetchSchedule() {
+  String raw;
+  if (!dbGet("/schedule", raw)) return false;
+  JsonDocument doc;
+  if (raw != "null") {                     // "null" means nothing is scheduled at all
+    DeserializationError err = deserializeJson(doc, raw);
+    if (err) {
+      Serial.printf("Schedule: couldn't read it (%s)\n", err.c_str());
+      return false;
+    }
+  }
+  for (int c = 1; c <= NUM_COMPARTMENTS; c++) {
+    ScheduleEntry &e = sched[c - 1];
+    e.used = false;
+    JsonObject o = doc[String("c") + c].as<JsonObject>();
+    if (o.isNull()) continue;
+    e.used = true;
+    e.manual = o["manual"] | false;
+    e.days = o["days"] | 0;
+    strlcpy(e.times, o["times"] | "", sizeof(e.times));
+    strlcpy(e.pausedUntil, o["pausedUntil"] | "", sizeof(e.pausedUntil));
+  }
+  return true;
+}
+
+// Should compartment c's medicine be dispensed today? It must be scheduled, not "manual",
+// switched on for today's weekday, and not on a break.
+bool dueToday(int c, const char* today, int appDay) {
+  return entryDueToday(sched[c - 1], today, appDay);
+}
+
+// Does compartment c's medicine have a dose at hhmm ("08:00")?
+bool hasTime(int c, const char* hhmm) {
+  return entryHasTime(sched[c - 1], hhmm);
+}
+
+bool slotHandled(const String &key) {
+  for (int i = 0; i < 16; i++) if (handledSlots[i] == key) return true;
+  return false;
+}
+
+void rememberSlot(const String &key) {
+  handledSlots[handledNext] = key;
+  handledNext = (handledNext + 1) % 16;
+}
+
+// Deals with one scheduled time. onTime = true means it is due now; false means it is too late and is skipped.
+// The outcome is recorded in Firebase at /device/done/<date>/<HHMM> so that a restart, or the app's
+// own "Dispense now" button, never dispenses the same dose twice.
+void handleSlot(const char* today, const char* hhmm, bool onTime, int appDay) {
+  char key[5] = { hhmm[0], hhmm[1], hhmm[3], hhmm[4], '\0' };          // "08:00" -> "0800"
+  String path = String("/device/done/") + today + "/" + key;
+
+  String existing;
+  if (dbGet(path.c_str(), existing) && existing != "null") {
+    Serial.printf("Schedule: %s was already handled (%s)\n", hhmm, existing.c_str());
+    return;
+  }
+
+  char msg[96];
+  if (!onTime) {
+    dbPut(path.c_str(), "\"missed\"");
+    snprintf(msg, sizeof(msg), "The %s dose was too late, so it was skipped. Nothing was dispensed.", hhmm);
+    notify("Missed dose", msg, "warning");
+    Serial.printf("Schedule: %s is too late, skipped\n", hhmm);
+    return;
+  }
+
+  int list[NUM_COMPARTMENTS];              // the compartments with a pill due at this time, in order
+  int total = 0;
+  for (int c = 1; c <= NUM_COMPARTMENTS; c++) {
+    if (dueToday(c, today, appDay) && hasTime(c, hhmm)) list[total++] = c;
+  }
+  if (total == 0) return;
+
+  dbPut(path.c_str(), "\"dispensing\"");   // claim it first, so a restart half way through can't dispense it again
+  Serial.printf("Schedule: %s is due, dispensing %d pill(s)\n", hhmm, total);
+  snprintf(msg, sizeof(msg), "Dispensing your %s pills (%d).", hhmm, total);
+  notify("Dose time", msg, "alarm_clock");
+
+  int given = 0;
+  for (int i = 0; i < total; i++) {
+    if (!dispenseFromCompartment(list[i], false, true)) break;   // stop at the first pill that doesn't drop
+    given++;
+  }
+
+  if (given == total) {
+    dbPut(path.c_str(), "\"ok\"");
+    snprintf(msg, sizeof(msg), "All %d pills for %s were dispensed.", total, hhmm);
+    notify("Dose complete", msg, "white_check_mark");
+  } else {
+    dbPut(path.c_str(), "\"jam\"");
+    snprintf(msg, sizeof(msg), "Only %d of %d pills for %s were dispensed. Please check Sprout.", given, total, hhmm);
+    notify("Dose incomplete", msg, "rotating_light");
+  }
+}
+
+// Called on every pass of loop(). Refreshes the schedule now and then, and handles any dose that has come due.
+void checkSchedule() {
+  if (time(nullptr) < 1700000000) return;  // the clock isn't set yet (the time from the internet hasn't arrived)
+
+  if (!scheduleLoaded || millis() - lastScheduleFetch >= SCHEDULE_REFRESH_MS) {
+    lastScheduleFetch = millis();
+    if (fetchSchedule()) scheduleLoaded = true;
+  }
+  if (!scheduleLoaded) return;
+
+  struct tm t;
+  if (!getLocalTime(&t, 0)) return;
+  char today[11];
+  strftime(today, sizeof(today), "%Y-%m-%d", &t);
+  int nowMin = t.tm_hour * 60 + t.tm_min;
+  int appDay = appWeekday(t.tm_wday);
+
+  // Every distinct time today that has a pill due, earliest first.
+  const int MAX_SLOTS = 30;
+  char slotText[MAX_SLOTS][6];
+  int slotMin[MAX_SLOTS];
+  int nSlots = gatherSlots(sched, NUM_COMPARTMENTS, today, appDay, slotText, slotMin, MAX_SLOTS);
+
+  for (int j = 0; j < nSlots; j++) {
+    SlotTiming timing = slotTiming(nowMin, slotMin[j], DOSE_WINDOW_MIN);
+    if (timing == SLOT_NOT_YET) break;     // sorted, so every later time is not yet either
+    String key = String(today) + " " + slotText[j];
+    if (slotHandled(key)) continue;
+    rememberSlot(key);
+    handleSlot(today, slotText[j], timing == SLOT_DUE, appDay);
+    return;                                // one time per pass; the next pass picks up any others
+  }
 }
 
 // Turns a WiFi status number into words, to help find out why a connection is failing.
@@ -456,6 +609,8 @@ void setup() {
 
   connectWiFi();
 
+  configTzTime(TIME_ZONE, "pool.ntp.org", "time.nist.gov");   // get the time from the internet, in Eastern time
+
   // NOTE: setInsecure() skips certificate checking. Fine for a demo,
   // but pin the certificate before using this for anything real.
   secureClient.setInsecure();
@@ -508,11 +663,15 @@ void loop() {
     int compartment, rTarget, sTarget;
     if (dbGetInt("/device/dispenseCompartment", compartment)) {
       dbPut("/device/dispenseCompartment", "null");   // consume the command so it can't run twice
-      dispenseFromCompartment(compartment);
+      dispenseFromCompartment(compartment, true, false);
     } else if (dbGetInt("/device/stepperTarget", rTarget) && dbGetInt("/device/servoAngle", sTarget)) {
       moveMotors(rTarget, sTarget);
     } else {
       Serial.println("Couldn't read a command (dispenseCompartment, or stepperTarget + servoAngle) - ignoring this trigger");
     }
+    return;                                // let the next pass look at the schedule, after this command is finished
   }
+
+  // 6. No command from the app: see whether a scheduled dose has come due.
+  checkSchedule();
 }

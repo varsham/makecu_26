@@ -16,10 +16,10 @@ function TodayScreen({ pills, deviceStatus, onDispense, takenTimes }) {
     setBusy(false);
     setSel([]);
   };
-  const greeting = "Good morning";
+  const greeting = D.greeting();
   return (
     <div>
-      <TopBar large eyebrow="Thursday, August 13" title={greeting} />
+      <TopBar large eyebrow={D.todayLabel()} title={greeting} />
       <div style={{ padding: "0 var(--screen-pad) 24px" }}>
         <window.DeviceStatus status={deviceStatus} />
 
@@ -48,7 +48,9 @@ function TodayScreen({ pills, deviceStatus, onDispense, takenTimes }) {
         ) : (
           <Card tone="leaf" style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center" }}>
             <Icon name="sprout" size={24} color="var(--leaf-600)" />
-            <div style={{ fontWeight: 600, color: "var(--leaf-800)" }}>That's everything for today. Nice work!</div>
+            <div style={{ fontWeight: 600, color: "var(--leaf-800)" }}>
+              {pills.length === 0 ? "Add your first medicine in My Pills to get started." : today.length === 0 ? "Nothing is scheduled for today." : "That's everything for today. Nice work!"}
+            </div>
           </Card>
         )}
 

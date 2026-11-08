@@ -23,15 +23,46 @@
   const left = (p) => Math.max(0, p.refill - p.dispensed);
   const perDay = (p) => (p.manual ? 1 : (p.times.length * p.days.length) / 7) || 1;
   const thresholds = (p) => ({ lowAt: Math.max(7, Math.round(perDay(p) * 7)), outAt: Math.max(3, Math.round(perDay(p) * 3)) });
+  // ---- Dates. "Today" is always worked out in Eastern time, the same clock the machine uses. ----
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const easternNow = () => {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(new Date());
+    const get = (type) => Number(parts.find((x) => x.type === type).value);
+    return { year: get("year"), month: get("month") - 1, day: get("day"), hour: get("hour"), minute: get("minute") };   // month is 0-11, like JavaScript dates
+  };
+  const isoDate = (year, month, day) => `${year}-${pad2(month + 1)}-${pad2(day)}`;   // "2026-11-08"
+  const todayISO = () => { const t = easternNow(); return isoDate(t.year, t.month, t.day); };
+  const addDaysISO = (iso, n) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + n));
+    return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+  };
+  const fmtShortDate = (iso) => {                                                       // "Nov 15"
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  };
+  const todayLabel = () => {                                                            // "Sunday, November 8"
+    const t = easternNow();
+    return new Date(Date.UTC(t.year, t.month, t.day)).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });
+  };
+  const greeting = () => { const h = easternNow().hour; return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
+  // A break is stored as the date the medicine comes back ("2026-11-15"): it is paused on every day before that date.
+  const isPaused = (p, year, month, day) => !!p.pausedUntil && isoDate(year, month, day) < p.pausedUntil;
+
   const summary = (p) => {
-    if (p.pausedUntil) return `Taking a break until Aug ${p.pausedUntil}`;
+    if (p.pausedUntil) return `Taking a break until ${fmtShortDate(p.pausedUntil)}`;
     if (p.manual) return "Whenever you need it";
     const d = p.days.length === 7 ? "Every day" : p.days.map((i) => DOW[i]).join(", ");
     return `${d} · ${p.times.map(fmtTime).join(", ")}`;
   };
-  // Aug 2026: the 1st is a Saturday. Weekday index, Monday = 0.
+  // Weekday index of a calendar date, Monday = 0.
   const weekdayOf = (year, month, day) => (new Date(year, month, day).getDay() + 6) % 7;
   const scheduledOn = (pills, year, month, day) =>
-    pills.filter((p) => !p.manual && p.days.includes(weekdayOf(year, month, day)) && !(p.pausedUntil && month === 7 && day < p.pausedUntil));
-  window.SproutData = { CATEGORIES, COMPARTMENT_COUNT, seedPills, DOW, fmtTime, left, thresholds, summary, weekdayOf, scheduledOn, TODAY: { year: 2026, month: 7, day: 13 } };
+    pills.filter((p) => !p.manual && p.days.includes(weekdayOf(year, month, day)) && !isPaused(p, year, month, day));
+  window.SproutData = {
+    CATEGORIES, COMPARTMENT_COUNT, seedPills, DOW, fmtTime, left, thresholds, summary, weekdayOf, scheduledOn,
+    easternNow, isoDate, todayISO, addDaysISO, fmtShortDate, todayLabel, greeting, isPaused,
+    get TODAY() { const t = easternNow(); return { year: t.year, month: t.month, day: t.day }; },   // the real date, in Eastern time
+  };
 })();
