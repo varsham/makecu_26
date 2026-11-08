@@ -22,6 +22,10 @@
 
 const unsigned long POLL_MS = 700;   // how often to check Firebase (milliseconds)
 
+// positions to represent various compartments
+// 0 to 1022 (stepper motor position)
+int compartments[3] = {170, 510, 850};
+
 // Stepper motor settings
 const int r1 = 25;
 const int r2 = 32;
@@ -30,6 +34,10 @@ const int r4 = 26;
 
 // Servo motor settings
 const int sPin = 13;
+
+// Ultrasonic sensor settings
+const int trigPin = 12;
+const int echoPin = 14;
 
 // ---------- Global objects and state ----------
 Stepper r(512, r1, r2, r3, r4);
@@ -124,10 +132,76 @@ void sToPos(int pos) {
   sPos = pos;
 }
 
+// ULTRASONIC SENSOR FUNCTIONS
+// Returns true if something is detected within `dist` centimeters in front of the sensor.
+// Returns false if nothing is that close (or if no echo comes back at all).
+bool checkPillReleased(int dist) {
+  // clear the trig pin
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  // send a 10 microsecond pulse; the sensor then sends out an ultrasonic burst
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // read the echoPin: how long (in microseconds) until the sound wave came back.
+  // The 25000 us timeout (about 429 cm) stops pulseIn from waiting a full second
+  // when nothing reflects the sound; it returns 0 in that case.
+  long duration = pulseIn(echoPin, HIGH, 25000);
+  if (duration == 0) return false;         // no echo, so nothing detected
+
+  // sound travels about 0.0343 cm per microsecond, and the wave goes out AND back,
+  // so the one-way distance is half of (time * speed)
+  float distance = duration * 0.0343 / 2;
+  Serial.printf("Ultrasonic: %.1f cm\n", distance);
+
+  return distance <= dist;
+}
+
 // COMBINED FUNCTIONS
 
-// TODO:
-// 
+// TODO: opening the door by changing the servo motor position
+void openDoor() {
+  int sPos = s.read();
+  // check if door is already open
+  if (sPos > 130) {
+    Serial.println("Door already open.");
+  } else {
+    sToPos(170);
+    Serial.println("Door opened.");
+  }
+}
+
+// TODO: closing the door by changing the servo motor position
+void closeDoor() {
+  int sPos = s.read();
+  if (sPos < 50) {
+    Serial.println("Door already closed.");
+  } else {
+    sToPos(10);
+    Serial.println("Door closed.");
+  }
+}
+
+// TODO: pill release mechanism function
+void pillRelease() {
+  openDoor();
+  closeDoor();
+
+  // check if the pill was successfully released using the ultrasonic sensor
+
+
+  Serial.println();
+}
+
+// TODO: shifting to a specific compartment
+void toCompartment(int c) {
+  // parameter: which compartment number, 1-indexed
+  rToPos(compartments[c - 1]);
+  notify("To compartment", "Rotated to specified compartment.", "arrow_forward");  // ...while this ~1 s request runs
+  Serial.printf("Rotated to compartment %d\n", c);
+}
 
 // Moves both motors to the requested targets, then reports where they ended up.
 void moveMotors(int rTarget, int sTarget) {
@@ -168,6 +242,10 @@ void connectWiFi() {
 void setup() {
   Serial.begin(115200);                    // open the Serial Monitor connection
 
+  // set up ultrasonic sensor
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
   // set up the stepper motor
   pinMode(r1, OUTPUT);
   pinMode(r2, OUTPUT);
@@ -193,6 +271,9 @@ void setup() {
 
 // Runs over and over, forever, after setup().
 void loop() {
+  // clear the ultrasonic sensor trig pin
+
+
   // 1. If WiFi dropped, try to reconnect and skip this pass.
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi lost, reconnecting");
