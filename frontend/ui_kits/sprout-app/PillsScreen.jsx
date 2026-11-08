@@ -1,13 +1,15 @@
 function PillsScreen({ pills, onOpen, onAdd }) {
   const { TopBar, IconButton, PillCard, Card, Icon } = window.SproutDesignSystem_50f72c;
   const D = window.SproutData;
+  const full = pills.length >= D.COMPARTMENT_COUNT;   // every compartment already holds a medicine
   const [filter, setFilter] = React.useState("all");
   const used = Object.keys(D.CATEGORIES).filter((k) => pills.some((p) => p.category === k));
   const shown = pills.filter((p) => filter === "all" || p.category === filter);
   const low = pills.filter((p) => !p.pausedUntil && D.left(p) <= D.thresholds(p).lowAt);
   return (
     <div>
-      <TopBar large title="My Pills" eyebrow={`${pills.length} medicines in your Sprout`} actions={<IconButton icon="plus" label="Add medicine" variant="solid" onClick={onAdd} />} />
+      <TopBar large title="My Pills" eyebrow={full ? `All ${D.COMPARTMENT_COUNT} compartments are full` : `${pills.length} of ${D.COMPARTMENT_COUNT} compartments in use`}
+        actions={<IconButton icon="plus" label={full ? "All compartments are full" : "Add medicine"} variant="solid" disabled={full} onClick={onAdd} style={full ? { opacity: 0.4, cursor: "not-allowed" } : undefined} />} />
       <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "2px var(--screen-pad) 4px", scrollbarWidth: "none" }}>
         <window.FilterChip label="All" active={filter === "all"} onClick={() => setFilter("all")} />
         {used.map((k) => <window.FilterChip key={k} label={D.CATEGORIES[k].label} color={D.CATEGORIES[k].color} active={filter === k} onClick={() => setFilter(k)} />)}

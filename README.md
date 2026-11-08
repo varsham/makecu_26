@@ -45,7 +45,7 @@ firebase deploy --only hosting
 
 ### Known gaps between the app and the firmware
 
-- The machine has **3 compartments**, but the app's demo data uses compartments up to 6, and the "Add medicine" screen offers more than 3. In live mode, dispensing from a compartment above 3 is refused with a message. The demo data and the picker still need updating.
+- The machine has **3 compartments**, and the app allows at most **3 medicines** (one per compartment). The limit is `COMPARTMENT_COUNT` in `frontend/ui_kits/sprout-app/data.js`, and the firmware's matching number is `NUM_COMPARTMENTS`. The demo starts with all 3 filled, so the add button is disabled. The app has **no way to remove a medicine yet**, so a full machine stays full until the page is reloaded.
 - `PILL_DIST_CM` in the firmware is **200 cm**, so the ultrasonic check counts almost anything as "a pill dropped". Set it to match the chute before trusting a dispense result.
 - "Pills left" in the app is counted down by the app (only when the device says a pill really dropped), not by the device, and it resets on reload.
 - The raw **move** command still exists for testing, but the app no longer has a screen for it.

@@ -8,7 +8,8 @@ function AddMedicine({ pills, editing, onBack, onSave }) {
   const [countOn, setCountOn] = React.useState(!!editing);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const taken = pills.filter((p) => !editing || p.id !== editing.id).map((p) => p.compartment);
-  const firstFree = [1, 2, 3, 4, 5, 6, 7, 8].find((n) => !taken.includes(n));
+  const slots = Array.from({ length: D.COMPARTMENT_COUNT }, (_, i) => i + 1);   // [1, 2, 3]
+  const firstFree = slots.find((n) => !taken.includes(n));
   const setTimesCount = (n) => {
     const defaults = ["08:00", "20:00", "13:00", "17:00", "22:00", "06:00"];
     setF((s) => ({ ...s, times: Array.from({ length: n }, (_, i) => s.times[i] || defaults[i]).sort() }));
@@ -81,10 +82,10 @@ function AddMedicine({ pills, editing, onBack, onSave }) {
             {Object.entries(D.CATEGORIES).map(([k, c]) => <window.FilterChip key={k} label={c.label} color={c.color} active={f.category === k} onClick={() => set("category", k)} />)}
           </div></div>
         <div>{label("Compartment")}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(8, minmax(0,1fr))", gap: 6 }}>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => {
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${slots.length}, minmax(0,1fr))`, gap: 6 }}>
+            {slots.map((n) => {
               const used = taken.includes(n), on = f.compartment === n;
-              return <button key={n} disabled={used} onClick={() => set("compartment", n)} style={{ aspectRatio: "0.85", borderRadius: "var(--radius-sm)", border: 0, cursor: used ? "not-allowed" : "pointer",
+              return <button key={n} disabled={used} onClick={() => set("compartment", n)} style={{ aspectRatio: "1.8", borderRadius: "var(--radius-sm)", border: 0, cursor: used ? "not-allowed" : "pointer",
                 fontFamily: "var(--font-mono)", fontSize: 13, background: on ? D.CATEGORIES[f.category].color : used ? "transparent" : "var(--oat)",
                 boxShadow: on ? "0 0 0 2.5px var(--ink-900)" : used ? "inset 0 0 0 1.5px var(--ink-100)" : "none", color: used ? "var(--ink-300)" : "var(--ink-900)" }}>{String(n).padStart(2, "0")}</button>;
             })}

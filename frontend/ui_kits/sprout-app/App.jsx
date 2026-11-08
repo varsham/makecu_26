@@ -52,7 +52,7 @@ function App() {
         else { setPills((ps) => [...ps, p]); setRoute(null); setTab("pills"); showToast(p.name + " is all set in No. " + p.compartment, "sprout"); }
       }} />;
   } else if (tab === "today") screen = <window.TodayScreen pills={pills} deviceStatus={status} onDispense={dispense} takenTimes={taken} />;
-  else if (tab === "pills") screen = <window.PillsScreen pills={pills} onOpen={(id) => setRoute({ name: "detail", id })} onAdd={() => setRoute({ name: "add" })} />;
+  else if (tab === "pills") screen = <window.PillsScreen pills={pills} onOpen={(id) => setRoute({ name: "detail", id })} onAdd={() => (pills.length >= D.COMPARTMENT_COUNT ? showToast("All " + D.COMPARTMENT_COUNT + " compartments are full", "x") : setRoute({ name: "add" }))} />;
   else screen = <window.ScheduleScreen pills={pills} />;
   const tabs = [{ id: "today", label: "Today", icon: "sun" }, { id: "pills", label: "My Pills", icon: "pill" }, { id: "schedule", label: "Schedule", icon: "calendar-days" }];
   return (
