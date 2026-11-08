@@ -96,6 +96,7 @@ function App() {
   if (route && route.name === "detail") {
     const p = pills.find((x) => x.id === route.id);
     screen = <window.PillDetail pill={p} pills={pills} onBack={() => setRoute(null)} onEdit={() => setRoute({ name: "edit", id: p.id })} onUpdate={update} toast={showToast}
+      onDelete={(gone) => { setPills((ps) => ps.filter((x) => x.id !== gone.id)); setRoute(null); showToast(gone.name + " was removed. Compartment " + gone.compartment + " is free", "check"); }}
       onPauseCategory={(cat, until) => setPills((ps) => ps.map((x) => (x.category === cat ? { ...x, pausedUntil: until } : x)))} />;
   } else if (route && (route.name === "add" || route.name === "edit")) {
     const editing = route.name === "edit" ? pills.find((x) => x.id === route.id) : null;

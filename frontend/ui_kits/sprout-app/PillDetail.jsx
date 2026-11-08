@@ -1,4 +1,4 @@
-function PillDetail({ pill: p, pills, onBack, onEdit, onUpdate, onPauseCategory, toast }) {
+function PillDetail({ pill: p, pills, onBack, onEdit, onUpdate, onPauseCategory, onDelete, toast }) {
   const { TopBar, IconButton, Card, Badge, Button, StockMeter, CompartmentTag, Sheet, NumberStepper, Switch, Icon } = window.SproutDesignSystem_50f72c;
   const D = window.SproutData;
   const c = D.CATEGORIES[p.category];
@@ -55,7 +55,21 @@ function PillDetail({ pill: p, pills, onBack, onEdit, onUpdate, onPauseCategory,
         ) : (
           <Button fullWidth variant="secondary" icon="pause" onClick={() => setSheet("break")}>Take a break</Button>
         )}
+        <Button fullWidth variant="danger" icon="trash-2" onClick={() => setSheet("delete")}>Remove from my Sprout</Button>
       </div>
+
+      <Sheet open={sheet === "delete"} onClose={() => setSheet(null)} title={"Remove " + p.name + "?"}
+        footer={<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Button fullWidth size="lg" variant="danger" icon="trash-2" onClick={() => { setSheet(null); onDelete(p); }}>Yes, remove it</Button>
+          <Button fullWidth variant="secondary" onClick={() => setSheet(null)}>Keep it</Button>
+        </div>}>
+        <p style={{ margin: "0 0 12px", color: "var(--text-body)", lineHeight: 1.5 }}>
+          {p.name} comes off your schedule right away, and Sprout will stop dispensing it.
+        </p>
+        <p style={{ margin: 0, color: "var(--text-body)", lineHeight: 1.5 }}>
+          Take any pills out of compartment {p.compartment} yourself. The compartment is then free for another medicine.
+        </p>
+      </Sheet>
 
       <Sheet open={sheet === "refill"} onClose={() => setSheet(null)} title="Log a refill"
         footer={<Button fullWidth size="lg" onClick={() => { onUpdate({ ...p, refill: refillN, dispensed: 0 }); setSheet(null); toast("Refilled! " + refillN + " " + p.name + " in No. " + p.compartment, "package-check"); }}>Save refill</Button>}>
