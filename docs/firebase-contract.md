@@ -24,4 +24,4 @@ If either side wants to change any of this (new fields, different ranges, new st
 
 - The `firebaseConfig` in a web page is a public web config, and it is meant to be there. What protects the data is the database rules, which are currently in **test mode (open to anyone)**. Fine for a demo, but add authentication and rules before real use.
 - The device sends its own push notifications through ntfy.sh. The frontend doesn't need to do anything for those.
-- A working reference implementation of the frontend is in `frontend-temp/index.html`.
+- A working example page that follows this contract (stepper and servo inputs, a send button, and the status line) is in git history: `git show 6bddf69:frontend-temp/index.html`.

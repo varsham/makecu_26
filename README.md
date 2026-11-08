@@ -21,4 +21,4 @@ The two sides only communicate through Firebase. The paths and rules are documen
 
 ## Frontend setup
 
-Put your app in `frontend/`. Read [`docs/firebase-contract.md`](docs/firebase-contract.md) first. `frontend-temp/index.html` is a working example of a page that follows it.
+Put your app in `frontend/`. Read [`docs/firebase-contract.md`](docs/firebase-contract.md) first. A working example page that follows it (stepper and servo inputs, a send button, and the status line) is in git history: `git show 6bddf69:frontend-temp/index.html`.
