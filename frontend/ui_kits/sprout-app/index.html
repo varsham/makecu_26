@@ -10,6 +10,22 @@
 <script src="../../_ds_bundle.js"></script>
 <script src="data.js"></script>
 <script src="sproutDevice.js"></script>
+<script>
+  // Demo mode is the default: dispensing is simulated and nothing moves the real machine.
+  // Add ?live=1 to the page URL (for example .../ui_kits/sprout-app/index.html?live=1)
+  // to connect to the real machine through Firebase. This is a public web config, not a secret.
+  if (new URLSearchParams(location.search).get("live") === "1") {
+    window.SproutDevice.connect({
+      apiKey: "AIzaSyClWxrZhWwi6HuDQigRB6FgwVQjUh79Nak",
+      authDomain: "sprout-makecu26.firebaseapp.com",
+      databaseURL: "https://sprout-makecu26-default-rtdb.firebaseio.com",
+      projectId: "sprout-makecu26",
+      storageBucket: "sprout-makecu26.firebasestorage.app",
+      messagingSenderId: "94592405023",
+      appId: "1:94592405023:web:e01ada846de8771d738f2a"
+    });
+  }
+</script>
 </head><body>
 <div id="root"></div>
 <script type="text/babel" src="Bits.jsx"></script>

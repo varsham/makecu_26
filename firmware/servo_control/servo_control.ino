@@ -42,6 +42,7 @@ bool checkForJam(int state, unsigned long start);
 // positions to represent various compartments
 // 0 to 1022 (stepper motor position)
 int compartments[3] = {170, 510, 850};
+const int NUM_COMPARTMENTS = sizeof(compartments) / sizeof(compartments[0]);   // 3
 
 // Stepper motor settings
 const int r1 = 25;
@@ -309,8 +310,10 @@ bool waitForPill(int dist) {
   return true;
 }
 
-// TODO: pill release mechanism function
-void pillRelease() {
+// Pill release mechanism: opens the door, waits for the ultrasonic sensor to see the
+// pill (trying to clear a jam if it doesn't), then closes the door.
+// Returns true if the pill was seen, false if it never dropped.
+bool pillRelease() {
   Serial.println("Starting process to release pill...");
   openDoor();
 
@@ -326,6 +329,7 @@ void pillRelease() {
     // state stays 2 (DOOR_JAM) so the problem remains visible
     Serial.println("Error with dispensing pill.");
   }
+  return released;
 }
 
 // TODO: shifting to a specific compartment
@@ -359,6 +363,42 @@ void moveMotors(int rTarget, int sTarget) {
   char msg[64];
   snprintf(msg, sizeof(msg), "Stepper at %d, servo at %d deg.", rPos, sPos);
   notify("Motors stopped", msg, "white_check_mark");
+}
+
+// Tells the app how a dispense turned out. The app matches it to its request by the
+// trigger value, so write it BEFORE the status goes back to "ready".
+void writeResult(int c, bool dispensed) {
+  String body = String("{\"trigger\":") + lastTrigger + ",\"compartment\":" + c +
+                ",\"dispensed\":" + (dispensed ? "true" : "false") + "}";
+  dbPut("/device/result", body);
+}
+
+// Rotates to compartment `c` (1 to NUM_COMPARTMENTS) and releases one pill, then
+// reports the result and status to the app.
+void dispenseFromCompartment(int c) {
+  if (c < 1 || c > NUM_COMPARTMENTS) {
+    Serial.printf("Dispense ignored: compartment %d doesn't exist (1 to %d)\n", c, NUM_COMPARTMENTS);
+    writeResult(c, false);
+    return;
+  }
+
+  state = 0;                               // clear any earlier jam before starting
+  Serial.printf("Dispense requested: compartment %d\n", c);
+  dbPut("/device/status", "\"moving\"");
+
+  toCompartment(c);                        // rotate (state becomes 1 if the rotation jams)
+  bool released = false;
+  if (state != 1 && state != 2) released = pillRelease();   // only open the door if we arrived
+
+  writeResult(c, released);                // before "ready", so the app can match it up
+  if (released) {
+    dbPut("/device/status", "\"ready\"");
+    char msg[64];
+    snprintf(msg, sizeof(msg), "Pill released from compartment %d.", c);
+    notify("Pill dispensed", msg, "pill");
+  }
+  // If it wasn't released, the jam code has already set the status to "jam" and notified you.
+  Serial.printf("Dispense result: compartment %d, dispensed = %s\n", c, released ? "yes" : "no");
 }
 
 // Connects to your WiFi network and waits until it succeeds.
@@ -401,6 +441,7 @@ void setup() {
   secureClient.setInsecure();
   http.setReuse(true);                     // keep the connection open between polls (faster)
 
+  dbPut("/device/dispenseCompartment", "null");   // forget any dispense command left over from before a reset
   dbPut("/device/status", "\"ready\"");    // tell the app we're online
   Serial.printf("Start positions -> stepper: %d, servo: %d degrees\n", rPos, sPos);
 }
@@ -439,15 +480,19 @@ void loop() {
     return;
   }
 
-  // 5. If the value is different from last time, the app was tapped:
-  //    remember the new value, read the two targets, and move both motors.
+  // 5. If the value is different from last time, the app sent a command.
+  //    A dispense command (dispenseCompartment) rotates to that compartment and releases a pill.
+  //    Otherwise it is a plain move: read the two targets and move both motors.
   if (trigger != lastTrigger) {
     lastTrigger = trigger;
-    int rTarget, sTarget;
-    if (dbGetInt("/device/stepperTarget", rTarget) && dbGetInt("/device/servoAngle", sTarget)) {
+    int compartment, rTarget, sTarget;
+    if (dbGetInt("/device/dispenseCompartment", compartment)) {
+      dbPut("/device/dispenseCompartment", "null");   // consume the command so it can't run twice
+      dispenseFromCompartment(compartment);
+    } else if (dbGetInt("/device/stepperTarget", rTarget) && dbGetInt("/device/servoAngle", sTarget)) {
       moveMotors(rTarget, sTarget);
     } else {
-      Serial.println("Couldn't read stepperTarget/servoAngle - ignoring this trigger");
+      Serial.println("Couldn't read a command (dispenseCompartment, or stepperTarget + servoAngle) - ignoring this trigger");
     }
   }
 }

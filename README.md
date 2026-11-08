@@ -30,7 +30,9 @@ cd frontend
 python3 -m http.server
 ```
 
-Then open http://localhost:8000. It starts in **demo mode**, which simulates the device and never moves the real machine. To talk to the real device, call `SproutDevice.connect(firebaseConfig)` (see `frontend/ui_kits/sprout-app/sproutDevice.js`) with the Firebase web config from the Firebase console.
+Then open http://localhost:8000. It starts in **demo mode**, which simulates the device and never moves the real machine.
+
+To control the real machine, open the app with `?live=1` on the end of the address, for example `http://localhost:8000/ui_kits/sprout-app/index.html?live=1`. Then **Dispense** really rotates the stepper, opens the door and waits for the ultrasonic sensor to see the pill. The app shows a message if the pill gets stuck. Without `?live=1` it stays in demo mode, so the deployed site can't move the machine by accident.
 
 Deploy to Firebase Hosting from `frontend/`:
 
@@ -43,9 +45,9 @@ firebase deploy --only hosting
 
 ### Known gaps between the app and the firmware
 
-- The app's adapter assumes **8 compartments** evenly spaced and a servo drop angle of **90°**. The firmware has **3 compartments** (positions 170, 510, 850) and a door that opens at 170° and closes at 10°.
-- The firmware can write the status `"jam"`. The adapter only understands `"ready"` and `"moving"`, so it would wait forever after a jam.
-- The app can't trigger `pillRelease()` yet; it only sends "move the stepper and servo here".
-- Nothing counts pills down on the device, so "pills left" in the app is not updated by real dispenses.
+- The machine has **3 compartments**, but the app's demo data uses compartments up to 6, and the "Add medicine" screen offers more than 3. In live mode, dispensing from a compartment above 3 is refused with a message. The demo data and the picker still need updating.
+- `PILL_DIST_CM` in the firmware is **200 cm**, so the ultrasonic check counts almost anything as "a pill dropped". Set it to match the chute before trusting a dispense result.
+- "Pills left" in the app is counted down by the app (only when the device says a pill really dropped), not by the device, and it resets on reload.
+- The raw **move** command still exists for testing, but the app no longer has a screen for it.
 
 The earlier plain test page that followed the contract is in git history: `git show 6bddf69:frontend-temp/index.html`.

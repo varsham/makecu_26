@@ -23,11 +23,12 @@ function FilterChip({ label, color, active, onClick }) {
 function DeviceStatus({ status }) {
   const moving = status === "moving";
   const ok = status === "ready";
+  const stuck = status === "jam";
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 32, padding: "0 12px 0 10px", borderRadius: 99, background: "var(--surface-card)", boxShadow: "var(--shadow-1)",
       fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "var(--text-body)" }}>
-      <span style={{ width: 9, height: 9, borderRadius: "50%", background: moving ? "var(--apricot-600)" : ok ? "var(--leaf-400)" : "var(--ink-300)" }} />
-      {moving ? "Sprout is dispensing…" : ok ? "Sprout is ready" : "Sprout is offline"}
+      <span style={{ width: 9, height: 9, borderRadius: "50%", background: moving ? "var(--apricot-600)" : ok ? "var(--leaf-400)" : stuck ? "var(--rose-500)" : "var(--ink-300)" }} />
+      {moving ? "Sprout is dispensing…" : ok ? "Sprout is ready" : stuck ? "Sprout is stuck. Please check it" : "Sprout is offline"}
     </span>
   );
 }

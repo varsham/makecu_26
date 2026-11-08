@@ -19,10 +19,25 @@ function App() {
   };
   const update = (p) => setPills((ps) => ps.map((x) => (x.id === p.id ? p : x)));
   const dispense = async (list, msg, time) => {
-    await window.SproutDevice.dispense(list.map((p) => p.compartment));
-    setPills((ps) => ps.map((p) => (list.some((x) => x.id === p.id) ? { ...p, dispensed: p.dispensed + 1 } : p)));
-    if (time) setTaken((t) => [...t, time]);
-    showToast(msg, "check");
+    let results;
+    try {
+      results = await window.SproutDevice.dispense(list.map((p) => p.compartment));
+    } catch (e) {
+      showToast(e.message || "Sprout couldn't be reached", "x");
+      return;
+    }
+    // results[i] is the outcome for list[i]. It can be shorter than the list if a pill got stuck.
+    const ok = list.map((p, i) => !!(results[i] && results[i].dispensed));
+    setPills((ps) => ps.map((p) => {
+      const i = list.findIndex((x) => x.id === p.id);
+      return i >= 0 && ok[i] ? { ...p, dispensed: p.dispensed + 1 } : p;   // only count pills that really dropped
+    }));
+    if (ok.every(Boolean)) {
+      if (time) setTaken((t) => [...t, time]);
+      showToast(msg, "check");
+    } else {
+      showToast("Something got stuck. Please check Sprout.", "x");
+    }
   };
   let screen;
   if (route && route.name === "detail") {
