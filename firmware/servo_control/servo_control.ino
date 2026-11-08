@@ -401,15 +401,35 @@ void dispenseFromCompartment(int c) {
   Serial.printf("Dispense result: compartment %d, dispensed = %s\n", c, released ? "yes" : "no");
 }
 
+// Turns a WiFi status number into words, to help find out why a connection is failing.
+const char* wifiStatusName(wl_status_t s) {
+  switch (s) {
+    case WL_NO_SSID_AVAIL:   return "network not found (hotspot off, wrong name, or it is 5 GHz only)";
+    case WL_CONNECT_FAILED:  return "connect failed (usually a wrong password)";
+    case WL_CONNECTION_LOST: return "connection lost";
+    case WL_DISCONNECTED:    return "disconnected / still trying";
+    case WL_IDLE_STATUS:     return "idle";
+    case WL_SCAN_COMPLETED:  return "scan completed";
+    case WL_CONNECTED:       return "connected";
+    default:                 return "unknown";
+  }
+}
+
 // Connects to your WiFi network and waits until it succeeds.
 // The ESP32 only supports 2.4 GHz networks.
 void connectWiFi() {
   WiFi.mode(WIFI_STA);                     // station mode: act as a WiFi client
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.print("Connecting to WiFi");
+  Serial.printf("Connecting to WiFi \"%s\"", WIFI_SSID);   // the network name only, never the password
+  unsigned long lastReport = 0;
   while (WiFi.status() != WL_CONNECTED) {  // print a dot every half second until connected
     delay(500);
     Serial.print(".");
+    if (millis() - lastReport >= 3000) {   // every 3 seconds, say why it hasn't connected yet
+      lastReport = millis();
+      wl_status_t st = WiFi.status();
+      Serial.printf("\n[WiFi status %d: %s]", (int)st, wifiStatusName(st));
+    }
   }
   Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
 }
@@ -431,8 +451,8 @@ void setup() {
 
   // set up the servo motor
   s.setPeriodHertz(50);                    // standard hobby servos expect a 50 Hz signal
-  s.attach(sPin, 500, 2400);               // pulse range in microseconds
-  sToPos(0);                               // start at 0 degrees
+  s.attach(sPin, 544, 2400);               // pulse range in microseconds (the standard servo default)
+  sToPos(10);                              // start at 10 degrees, the closed-door position (see closeDoor)
 
   connectWiFi();
 
@@ -453,7 +473,7 @@ void loop() {
 
   // 1. If WiFi dropped, try to reconnect and skip this pass.
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi lost, reconnecting");
+    Serial.printf("WiFi lost (status %d: %s), reconnecting\n", (int)WiFi.status(), wifiStatusName(WiFi.status()));
     WiFi.reconnect();
     delay(2000);
     return;
