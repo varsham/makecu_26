@@ -22,6 +22,23 @@
 
 const unsigned long POLL_MS = 700;   // how often to check Firebase (milliseconds)
 
+// state: contains the current state of the machine
+// 0 - REST: nothing happening
+// 1 - ROTATION_JAM: machine is jammed at the rotation step
+// 2 - DOOR_JAM: machine is jammed at the door opening step
+// 3 - CHOOSING_PILL: machine is rotating to choose a pill
+// 4 - OPENING_DOOR: machine is opening the door to let the pill through
+int state = 0; // set it initially to REST
+
+// Time limits for jam detection (milliseconds). Measure your real timings and adjust.
+const unsigned long ROTATION_TIMEOUT_MS = 12000;  // a full-range stepper move takes ~6 s, so allow 2x
+const unsigned long DOOR_TIMEOUT_MS = 3000;       // how long to wait for the pill to be seen after the door opens
+const unsigned long FIX_TIMEOUT_MS = 5000;        // how long fixJam() keeps retrying before giving up
+const int PILL_DIST_CM = 200;                     // "pill detected" distance for the ultrasonic sensor (cm); adjust to your chute
+
+// Declared here because rToPos() and waitForPill() use it before it is defined below.
+bool checkForJam(int state, unsigned long start);
+
 // positions to represent various compartments
 // 0 to 1022 (stepper motor position)
 int compartments[3] = {170, 510, 850};
@@ -42,6 +59,7 @@ const int echoPin = 14;
 // ---------- Global objects and state ----------
 Stepper r(512, r1, r2, r3, r4);
 int rPos = 0;                        // current stepper position (0-1023); 0 = where it was at power-on
+int rTargetPos = 0;                  // where the last rotation was supposed to end up
 Servo s;
 int sPos = 0;                        // current servo angle in degrees
 WiFiClientSecure secureClient;       // the encrypted connection used for all requests
@@ -115,15 +133,102 @@ void rStep(int dir) {
 // must be accurate; determines rotation so the holes for the pills to fall out align
 // `pos` must be an even number from 0 to 1022 (the stepper moves 2 steps at a time).
 void rToPos(int pos) {
+  rTargetPos = pos;                        // remember the goal so fixJam() knows what "right spot" means
   int dir = 1;
   if (rPos > pos) dir *= -1;
+  state = 3;                               // CHOOSING_PILL: the machine is rotating
+  unsigned long start = millis();          // when this rotation began
   while (rPos != pos) {
+    // stop if the rotation is taking far too long (this sets state to 1 = ROTATION_JAM)
+    if (checkForJam(3, start)) return;
     rStep(dir);
   }
+  state = 0;                               // arrived with no jam: back to REST
 }
 
-// TODO:
-// Jam mechanism: void fixJam()
+// Detect a jam by timing.
+// `state` is the activity in progress (3 = CHOOSING_PILL, 4 = OPENING_DOOR) and
+// `start` is the millis() value from when that activity began.
+// Returns true if it has run longer than its time limit. In that case it also
+// records the jam in the global state (1 = ROTATION_JAM, 2 = DOOR_JAM), and
+// reports it to the app and your phone.
+//
+// Note: this catches "took too long". It cannot see a stepper that skips steps,
+// because step() takes the same time whether the motor turns or not.
+bool checkForJam(int state, unsigned long start) {
+  unsigned long elapsed = millis() - start;   // stays correct even when millis() wraps around
+
+  int jam = 0;
+  if (state == 3 && elapsed > ROTATION_TIMEOUT_MS) jam = 1;      // rotation too slow
+  else if (state == 4 && elapsed > DOOR_TIMEOUT_MS) jam = 2;     // pill never seen after door opened
+  if (jam == 0) return false;
+
+  ::state = jam;                              // "::state" is the global; the parameter above hides it
+  Serial.printf("JAM detected (state %d) after %lu ms\n", jam, elapsed);
+  dbPut("/device/status", "\"jam\"");
+  notify("Jam detected",
+         jam == 1 ? "The rotation is jammed." : "The pill did not drop after the door opened.",
+         "warning");
+  return true;
+}
+
+// Is the machine in the right spot for the last rotation?
+// LIMITATION: rPos is a counter that rStep() updates every time it is told to move,
+// whether or not the motor really turned. So this only tells us the code finished
+// counting, not where the hardware physically is. To make it a real check, replace the
+// comparison below with a reading from a position sensor (home switch, hall sensor, encoder).
+bool atRightPosition() {
+  return rPos == rTargetPos;
+}
+
+// Tries to clear a jam by retrying until it works or FIX_TIMEOUT_MS (5 s) passes.
+// `state` is the jam to fix (1 = ROTATION_JAM, 2 = DOOR_JAM).
+// Returns true if the jam was cleared, false if we gave up.
+bool fixJam(int state) {
+  if (state == 1) {
+    // a state of 1 indicates a rotation jam: the machine never reached the right spot.
+    // Keep nudging it toward the target, and stop as soon as it is in the right spot.
+    unsigned long start = millis();
+    int attempts = 0;
+    while (millis() - start < FIX_TIMEOUT_MS) {
+      if (atRightPosition()) {
+        ::state = 0;                       // "::state" is the global; the parameter hides it
+        Serial.printf("Rotation jam cleared after %d notches (%lu ms)\n", attempts, millis() - start);
+        dbPut("/device/status", "\"ready\"");
+        notify("Jam cleared", "The machine reached the right position.", "white_check_mark");
+        return true;
+      }
+      attempts++;
+      rStep(rPos < rTargetPos ? 1 : -1);   // one more notch toward the target
+    }
+    Serial.printf("fixJam gave up after %d notches (%lu ms); position %d, wanted %d\n",
+                  attempts, millis() - start, rPos, rTargetPos);
+    notify("Jam NOT cleared", "The machine could not reach the right position in 5 seconds.", "rotating_light");
+    return false;
+  }
+
+  if (state == 2) {
+    // a state of 2 indicates a door jam: the pill didn't drop.
+    // Shake the door back and forth, checking the sensor after every shake.
+    unsigned long start = millis();
+    int attempts = 0;
+    while (millis() - start < FIX_TIMEOUT_MS) {
+      attempts++;
+      sToPos(140); delay(150);             // small shake: nudge the door a little...
+      sToPos(170); delay(150);             // ...and back to fully open
+      if (checkPillReleased(PILL_DIST_CM)) {
+        ::state = 0;                       // "::state" is the global; the parameter hides it
+        Serial.printf("Jam cleared after %d attempts (%lu ms)\n", attempts, millis() - start);
+        dbPut("/device/status", "\"ready\"");
+        notify("Jam cleared", "The pill dropped.", "white_check_mark");
+        return true;
+      }
+    }
+    Serial.printf("fixJam gave up after %d attempts (%lu ms)\n", attempts, millis() - start);
+    notify("Jam NOT cleared", "Could not clear the jam in 5 seconds. Please check the machine.", "rotating_light");
+  }
+  return false;
+}
 
 // SERVO MOTOR FUNCTIONS
 // will open and close the door (doesn't need to be super accurate)
@@ -136,6 +241,7 @@ void sToPos(int pos) {
 // Returns true if something is detected within `dist` centimeters in front of the sensor.
 // Returns false if nothing is that close (or if no echo comes back at all).
 bool checkPillReleased(int dist) {
+  Serial.println("Checking if pill was released properly...");
   // clear the trig pin
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -149,13 +255,17 @@ bool checkPillReleased(int dist) {
   // The 25000 us timeout (about 429 cm) stops pulseIn from waiting a full second
   // when nothing reflects the sound; it returns 0 in that case.
   long duration = pulseIn(echoPin, HIGH, 25000);
-  if (duration == 0) return false;         // no echo, so nothing detected
+  if (duration == 0) {
+    Serial.println("Error calculating distance.");
+    return false;         // no echo, so nothing detected
+  }
 
   // sound travels about 0.0343 cm per microsecond, and the wave goes out AND back,
   // so the one-way distance is half of (time * speed)
   float distance = duration * 0.0343 / 2;
-  Serial.printf("Ultrasonic: %.1f cm\n", distance);
+  Serial.printf("Calculated Distance: %.1f cm\n", distance);
 
+  if (distance <= dist) Serial.println("Confirmed pill release.");
   return distance <= dist;
 }
 
@@ -163,6 +273,8 @@ bool checkPillReleased(int dist) {
 
 // TODO: opening the door by changing the servo motor position
 void openDoor() {
+  state = 4;                               // OPENING_DOOR: stays 4 until the pill is seen (or a jam is flagged)
+  Serial.println("Starting process to open door...");
   int sPos = s.read();
   // check if door is already open
   if (sPos > 130) {
@@ -175,6 +287,7 @@ void openDoor() {
 
 // TODO: closing the door by changing the servo motor position
 void closeDoor() {
+  Serial.println("Starting process to close door...");
   int sPos = s.read();
   if (sPos < 50) {
     Serial.println("Door already closed.");
@@ -184,21 +297,42 @@ void closeDoor() {
   }
 }
 
+// Keeps checking the ultrasonic sensor until it sees the pill.
+// Returns true if the pill was seen, or false if DOOR_TIMEOUT_MS passed first (a door jam).
+bool waitForPill(int dist) {
+  Serial.println("Waiting for pill...");
+  unsigned long start = millis();          // when we started waiting
+  while (!checkPillReleased(dist)) {
+    if (checkForJam(4, start)) return false;   // 4 = OPENING_DOOR; waited too long
+    delay(50);                                 // pause between sensor readings
+  }
+  return true;
+}
+
 // TODO: pill release mechanism function
 void pillRelease() {
+  Serial.println("Starting process to release pill...");
   openDoor();
+
+  // keep the door open until the ultrasonic sensor sees the pill (or time runs out)
+  bool released = waitForPill(PILL_DIST_CM);
+  if (!released) released = fixJam(state);   // state is 2 (door jam) here; the door is still open so it can be shaken
+
   closeDoor();
-
-  // check if the pill was successfully released using the ultrasonic sensor
-
-
-  Serial.println();
+  if (released) {
+    state = 0;                             // pill dropped: back to REST
+    Serial.println("Pill successfully dispensed.");
+  } else {
+    // state stays 2 (DOOR_JAM) so the problem remains visible
+    Serial.println("Error with dispensing pill.");
+  }
 }
 
 // TODO: shifting to a specific compartment
 void toCompartment(int c) {
   // parameter: which compartment number, 1-indexed
   rToPos(compartments[c - 1]);
+  if (state == 1 || state == 2) return;    // a jam was reported, so we didn't actually arrive
   notify("To compartment", "Rotated to specified compartment.", "arrow_forward");  // ...while this ~1 s request runs
   Serial.printf("Rotated to compartment %d\n", c);
 }
@@ -210,12 +344,14 @@ void moveMotors(int rTarget, int sTarget) {
   rTarget = constrain(rTarget, 0, 1022);
   rTarget -= rTarget % 2;                  // odd positions can't be reached, so round down to even
 
+  state = 0;                               // clear any earlier jam before starting a new move
   Serial.printf("Moving: stepper %d -> %d, servo %d -> %d\n", rPos, rTarget, sPos, sTarget);
   dbPut("/device/status", "\"moving\"");
 
   sToPos(sTarget);                         // servo starts moving right away...
   notify("Motors started", "The motors are moving.", "arrow_forward");  // ...while this ~1 s request runs
   rToPos(rTarget);                         // blocks until the stepper has arrived
+  if (state == 1 || state == 2) return;    // a jam was reported; don't overwrite "jam" with "ready"
 
   Serial.printf("Final positions -> stepper: %d, servo: %d degrees\n", rPos, sPos);
 
