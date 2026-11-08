@@ -41,10 +41,10 @@ function App() {
   else screen = <window.ScheduleScreen pills={pills} />;
   const tabs = [{ id: "today", label: "Today", icon: "sun" }, { id: "pills", label: "My Pills", icon: "pill" }, { id: "schedule", label: "Schedule", icon: "calendar-days" }];
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 480, height: "100%", overflow: "hidden", background: "var(--bg-app)", display: "flex", flexDirection: "column" }}>
-      <div ref={scroller} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 20 }}>{screen}</div>
-      {!route && <TabBar items={tabs} value={tab} onChange={(t) => { setTab(t); setRoute(null); }} />}
-      <div style={{ position: "absolute", left: 16, right: 16, bottom: route ? 30 : 104, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 60 }}>
+    <div style={{ position: "relative", width: "100%", maxWidth: 640, height: "100%", overflow: "hidden", background: "var(--bg-app)", display: "flex", flexDirection: "column" }}>
+      {!route && <div className="topnav"><TabBar items={tabs} value={tab} onChange={(t) => { setTab(t); setRoute(null); }} /></div>}
+      <div ref={scroller} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: route ? 20 : 0 }}>{screen}</div>
+      <div style={{ position: "absolute", left: 16, right: 16, bottom: 30, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 60 }}>
         <Toast message={toast.m} icon={toast.icon} visible={toast.visible} />
       </div>
     </div>
