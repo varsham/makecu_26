@@ -66,9 +66,11 @@
     // compartments: array of compartment numbers, one entry per pill (repeat for 2 pills).
     // Returns one { dispensed } per pill that was tried. It stops after the first pill that
     // didn't drop, so the array can be shorter than the list. Throws if the device can't be reached.
-    async dispense(compartments, onStep) {
+    // Optional callbacks: onStart(n, total) fires just before pill n begins; onStep(n, total) fires after it finishes.
+    async dispense(compartments, onStep, onStart) {
       const results = [];
       for (let i = 0; i < compartments.length; i++) {
+        onStart && onStart(i + 1, compartments.length);
         const r = await sendOne(compartments[i]);
         results.push(r);
         onStep && onStep(i + 1, compartments.length);

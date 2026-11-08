@@ -12,16 +12,21 @@ function App() {
   React.useEffect(() => window.SproutDevice.onStatus(setStatus), []);
   React.useEffect(() => { localStorage.setItem("sprout-kit-tab", tab); }, [tab]);
   React.useEffect(() => { if (scroller.current) scroller.current.scrollTop = 0; }, [tab, route && route.name]);
-  const showToast = (m, icon = "check") => {
+  // sticky = true keeps the message on screen until the next toast replaces it (used for progress).
+  const showToast = (m, icon = "check", sticky = false) => {
     clearTimeout(timer.current);
     setToast({ m, icon, visible: true });
-    timer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), 2600);
+    if (!sticky) timer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), 2600);
   };
   const update = (p) => setPills((ps) => ps.map((x) => (x.id === p.id ? p : x)));
   const dispense = async (list, msg, time) => {
     let results;
     try {
-      results = await window.SproutDevice.dispense(list.map((p) => p.compartment));
+      results = await window.SproutDevice.dispense(list.map((p) => p.compartment), null, (n, total) => {
+        // progress message while each pill is being dispensed, e.g. "Dispensing 2 of 3: Vitamin D"
+        const name = list[n - 1].name;
+        showToast(total === 1 ? "Dispensing " + name + "…" : "Dispensing " + n + " of " + total + ": " + name, "pill", true);
+      });
     } catch (e) {
       showToast(e.message || "Sprout couldn't be reached", "x");
       return;
