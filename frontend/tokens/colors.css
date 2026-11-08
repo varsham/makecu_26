@@ -1,0 +1,26 @@
+:root{
+/* Paired swatches from the moodboard: each hue has a soft tint + a deep tone */
+--leaf-50:#F2F5DA;--leaf-200:#CBD960;--leaf-400:#93A146;--leaf-600:#617028;--leaf-800:#3F4A18;
+--rose-50:#FBE7EC;--rose-200:#F7A9B9;--rose-500:#CE6377;--rose-700:#A3475A;
+--sky-50:#E6F4F8;--sky-200:#BFE5F0;--sky-600:#0874A0;--sky-800:#05506F;
+--apricot-50:#FEEEDD;--apricot-200:#FCAD6A;--apricot-600:#F76D0B;--apricot-800:#B44E05;
+/* Calendar paper + tiles */
+--paper:#F4F2EE;--paper-2:#EEEDEB;--cream:#EBE6DD;--sand:#D8CBB8;--oat:#E6DDD3;--tan:#C1A48B;--honey:#EAC98C;--mauve:#ADA2A2;
+/* Warm ink neutrals */
+--ink-900:#2B2724;--ink-700:#4A443F;--ink-500:#7A716A;--ink-300:#B5ADA5;--ink-100:#E2DDD6;--white:#FFFDF9;
+
+/* Semantic */
+--bg-app:var(--paper);--surface-card:var(--white);--surface-sunken:var(--paper-2);--surface-tile:var(--oat);
+--text-strong:var(--ink-900);--text-body:var(--ink-700);--text-muted:var(--ink-500);--text-on-accent:var(--white);
+--border-soft:var(--ink-100);--border-strong:var(--ink-300);
+--brand:var(--leaf-600);--brand-hover:var(--leaf-800);--brand-soft:var(--leaf-50);--brand-bright:var(--leaf-200);
+--accent:var(--rose-500);--accent-soft:var(--rose-50);
+--info:var(--sky-600);--info-soft:var(--sky-50);
+--focus-ring:var(--sky-200);
+/* Stock levels */
+--stock-ok:var(--leaf-400);--stock-ok-soft:var(--leaf-50);
+--stock-low:var(--apricot-600);--stock-low-soft:var(--apricot-50);
+--stock-out:var(--rose-500);--stock-out-soft:var(--rose-50);
+/* Pill categories (calendar-tile family) */
+--cat-vitamin:var(--honey);--cat-daily:var(--leaf-200);--cat-heart:var(--rose-200);--cat-pain:var(--apricot-200);--cat-sleep:var(--sky-200);--cat-other:var(--mauve);
+}

@@ -1,0 +1,19 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Core" -->
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;padding:20px;background:var(--bg-app);font-family:var(--font-body);color:var(--text-body)}.r{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.col{display:flex;flex-direction:column;gap:16px}</style></head><body><div id="root"></div>
+<script type="text/babel">
+const DS=window.SproutDesignSystem_50f72c;
+const {Button,IconButton,Badge,Card}=DS;
+function Demo(){return <div className="col">
+<div className="r"><Button icon="sparkles">Dispense</Button><Button variant="secondary" icon="camera">Scan label</Button><Button variant="soft">Add pill</Button><Button variant="ghost">Skip</Button><Button variant="danger" icon="trash-2">Remove</Button></div>
+<div className="r"><Button size="sm">Small</Button><Button size="lg" icon="sparkles">Large</Button><Button disabled>Disabled</Button><IconButton icon="chevron-left" label="Back" variant="soft"/><IconButton icon="calendar-days" label="Calendar" variant="card"/><IconButton icon="plus" label="Add" variant="solid"/></div>
+<div className="r"><Badge tone="leaf" dot>Daily</Badge><Badge tone="honey" dot>Vitamins</Badge><Badge tone="rose" dot>Heart</Badge><Badge tone="sky" icon="pause">Paused</Badge><Badge tone="apricot" icon="alert-circle">Running low</Badge><Badge>Optional</Badge></div>
+<div className="r" style={{alignItems:'stretch'}}><Card style={{flex:1}}><b style={{fontFamily:'var(--font-display)'}}>White card</b><div style={{fontSize:14,color:'var(--text-muted)'}}>Default surface</div></Card><Card tone="honey" style={{flex:1}}><b style={{fontFamily:'var(--font-display)'}}>Honey tile</b></Card><Card tone="leaf" style={{flex:1}}><b style={{fontFamily:'var(--font-display)'}}>Leaf tint</b></Card></div>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo/>);
+</script></body></html>

@@ -1,0 +1,9 @@
+:root{
+--font-display:"Fredoka","Nunito",ui-rounded,system-ui,sans-serif;
+--font-body:"Figtree",system-ui,-apple-system,sans-serif;
+--font-mono:"DM Mono",ui-monospace,monospace;
+--fs-display:34px;--fs-h1:28px;--fs-h2:22px;--fs-h3:18px;--fs-body:16px;--fs-small:14px;--fs-caption:12px;
+--lh-tight:1.15;/* @kind font */--lh-snug:1.3;/* @kind font */--lh-body:1.5;/* @kind font */
+--fw-regular:400;/* @kind font */--fw-medium:500;/* @kind font */--fw-semibold:600;/* @kind font */--fw-bold:700;/* @kind font */
+--tracking-caps:.06em;/* @kind font */
+}

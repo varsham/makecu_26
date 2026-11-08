@@ -1,0 +1,9 @@
+:root{
+--shadow-1:0 1px 2px rgba(74,60,44,.08);
+--shadow-2:0 2px 8px rgba(74,60,44,.08),0 1px 2px rgba(74,60,44,.06);
+--shadow-3:0 12px 32px rgba(74,60,44,.14),0 2px 6px rgba(74,60,44,.06);
+--shadow-press:inset 0 2px 4px rgba(74,60,44,.12);
+--ease-soft:cubic-bezier(.3,.7,.4,1);/* @kind other */--ease-sprout:cubic-bezier(.34,1.4,.64,1);/* @kind other */
+--dur-fast:120ms;/* @kind other */--dur-base:200ms;/* @kind other */--dur-slow:360ms;/* @kind other */
+--scrim:rgba(43,39,36,.32);
+}
