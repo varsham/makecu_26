@@ -2,7 +2,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sprout app — UI kit</title>
 <link rel="stylesheet" href="../../styles.css">
-<style>html,body{margin:0;min-height:100%}body{background:var(--paper-2);font-family:var(--font-body);color:var(--text-body);display:flex;align-items:center;justify-content:center;gap:56px;padding:28px;box-sizing:border-box;min-height:100vh;flex-wrap:wrap}a{color:var(--brand)}a:hover{color:var(--brand-hover)}button{font-family:inherit}input[type=time]::-webkit-calendar-picker-indicator{opacity:.4}*::-webkit-scrollbar{display:none}.side{max-width:300px;display:flex;flex-direction:column;gap:14px}.side h1{font-family:var(--font-display);font-weight:600;font-size:34px;color:var(--leaf-600);margin:0;display:flex;align-items:center;gap:10px}.side p{margin:0;line-height:1.55;font-size:15px}.side ol{margin:0;padding-left:20px;line-height:1.7;font-size:14px}</style>
+<style>html,body{margin:0;min-height:100%}body{background:var(--paper-2);font-family:var(--font-body);color:var(--text-body)}#root{display:flex;justify-content:center;height:100vh;height:100dvh}a{color:var(--brand)}a:hover{color:var(--brand-hover)}button{font-family:inherit}input[type=time]::-webkit-calendar-picker-indicator{opacity:.4}*::-webkit-scrollbar{display:none}</style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
@@ -12,11 +12,6 @@
 <script src="sproutDevice.js"></script>
 </head><body>
 <div id="root"></div>
-<div class="side">
-<h1><img src="../../assets/sprout-mark.png" alt="" style="height:44px">sprout</h1>
-<p>Demo mode: dispensing is simulated, nothing is sent to a real machine.</p>
-<ol><li>Today: tap pills in Manual mode, then Dispense</li><li>My Pills: open Vitamin D, log a refill or take a break</li><li>+ on My Pills: scan a label</li><li>Schedule: drag Plan ahead, tap a day</li></ol>
-</div>
 <script type="text/babel" src="Bits.jsx"></script>
 <script type="text/babel" src="TodayScreen.jsx"></script>
 <script type="text/babel" src="PillsScreen.jsx"></script>

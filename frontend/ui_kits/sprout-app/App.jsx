@@ -41,14 +41,11 @@ function App() {
   else screen = <window.ScheduleScreen pills={pills} />;
   const tabs = [{ id: "today", label: "Today", icon: "sun" }, { id: "pills", label: "My Pills", icon: "pill" }, { id: "schedule", label: "Schedule", icon: "calendar-days" }];
   return (
-    <div style={{ width: 390, height: 844, borderRadius: 52, padding: 10, background: "#2B2724", boxShadow: "0 30px 80px rgba(74,60,44,.28)", flexShrink: 0 }}>
-      <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: 42, overflow: "hidden", background: "var(--bg-app)", display: "flex", flexDirection: "column" }}>
-        <window.StatusBar />
-        <div ref={scroller} style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>{screen}</div>
-        {!route && <TabBar items={tabs} value={tab} onChange={(t) => { setTab(t); setRoute(null); }} />}
-        <div style={{ position: "absolute", left: 16, right: 16, bottom: route ? 30 : 104, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 60 }}>
-          <Toast message={toast.m} icon={toast.icon} visible={toast.visible} />
-        </div>
+    <div style={{ position: "relative", width: "100%", maxWidth: 480, height: "100%", overflow: "hidden", background: "var(--bg-app)", display: "flex", flexDirection: "column" }}>
+      <div ref={scroller} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 20 }}>{screen}</div>
+      {!route && <TabBar items={tabs} value={tab} onChange={(t) => { setTab(t); setRoute(null); }} />}
+      <div style={{ position: "absolute", left: 16, right: 16, bottom: route ? 30 : 104, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 60 }}>
+        <Toast message={toast.m} icon={toast.icon} visible={toast.visible} />
       </div>
     </div>
   );
