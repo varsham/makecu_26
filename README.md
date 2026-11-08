@@ -7,9 +7,11 @@ Pill-dispenser prototype: an ESP32 drives a stepper motor and a servo, controlle
 | Folder | What it is | Who works on it |
 |---|---|---|
 | `firmware/servo_control/` | ESP32 sketch (Arduino IDE, board: ESP32 Dev Module) | firmware / backend |
-| `frontend/` | Web app and Firebase Hosting config | frontend |
+| `frontend/` | The real web app (create this folder when you push; it is reserved for the frontend owner) | frontend |
+| `frontend-temp/` | Temporary placeholder app used for testing the firmware. **Delete it** once `frontend/` is ready. | firmware owner |
+| `docs/` | Shared documents, including the data contract | both |
 
-The two sides only communicate through Firebase. The data paths and rules are documented in [`frontend/README.md`](frontend/README.md). Please keep that contract in sync if either side changes.
+The two sides only communicate through Firebase. The paths and rules are documented in [`docs/firebase-contract.md`](docs/firebase-contract.md). Please keep that contract in sync if either side changes.
 
 ## Firmware setup
 
@@ -19,4 +21,4 @@ The two sides only communicate through Firebase. The data paths and rules are do
 
 ## Frontend setup
 
-See [`frontend/README.md`](frontend/README.md).
+Put your app in `frontend/`. Read [`docs/firebase-contract.md`](docs/firebase-contract.md) first. `frontend-temp/index.html` is a working example of a page that follows it.
